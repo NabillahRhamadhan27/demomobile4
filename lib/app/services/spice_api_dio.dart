@@ -8,9 +8,12 @@ class SpiceApiDio {
 
   static Future<List<Spice>> fetchSpices() async {
     final response = await dio.get('spices');
+
     if (response.statusCode == 200) {
-      final List data = response.data;
-      return data.map((e) => Spice.fromJson(e)).toList();
+      final List data = response.data as List;
+      return data
+          .map((e) => Spice.fromJson(e as Map<String, dynamic>))
+          .toList();
     } else {
       throw Exception('Gagal memuat data rempah (Dio)');
     }

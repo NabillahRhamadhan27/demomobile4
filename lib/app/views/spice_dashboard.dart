@@ -7,165 +7,119 @@ class SpiceDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(SpiceController());
+    final spiceC = Get.find<SpiceController>();
 
     return Scaffold(
-      backgroundColor: Colors.teal[50],
       appBar: AppBar(
-        backgroundColor: Colors.teal,
-        title: const Text(
-          "SpiceTrack Dashboard",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
+        title: const Text("Daftar Rempah"),
         actions: [
           IconButton(
-            onPressed: controller.toggleLibrary,
-            icon: Obx(
-              () => Icon(
-                controller.useDio.value
-                    ? Icons.swap_horiz
-                    : Icons.swap_vert_circle_outlined,
-                color: Colors.white,
-              ),
-            ),
-            tooltip: "Ganti HTTP/Dio",
+            icon: const Icon(Icons.add),
+            onPressed: () {
+              Get.toNamed('/add'); // ke halaman tambah
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => spiceC.loadSpices(forceRemote: true),
           ),
         ],
       ),
+
       body: Obx(() {
-        if (controller.isLoading.value) {
+        if (spiceC.isLoading.value) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (controller.spices.isEmpty) {
-          return const Center(child: Text('Tidak ada data rempah 🌿'));
+        if (spiceC.spices.isEmpty) {
+          return const Center(child: Text("Belum ada data bumbu"));
         }
 
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ================================
+            // HASIL UJI SHARED PREFERENCES
+            // ================================
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                "Waktu respon: ${controller.responseTime.value} ms "
-                "(${controller.useDio.value ? 'Dio' : 'HTTP'})",
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
+              padding: const EdgeInsets.all(8),
+              child: Obx(() {
+                return Text(
+                  "SharedPref Read: ${spiceC.prefReadTime.value} ms | "
+                  "Write: ${spiceC.prefWriteTime.value} ms",
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                );
+              }),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      controller.loadSpicesWithRecommendation();
-                    },
-                    icon: const Icon(Icons.timer),
-                    label: const Text("Async–Await"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      controller.loadSpicesWithCallback();
-                    },
-                    icon: const Icon(Icons.link),
-                    label: const Text("Callback"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Obx(
-              () => Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  controller.recommendationText.value,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: controller.spices.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.8,
-                ),
-                itemBuilder: (context, index) {
-                  final spice = controller.spices[index];
-                  final isSelected = controller.selectedIndex.value == index;
 
-                  return GestureDetector(
-                    onTap: () {
-                      controller.selectedIndex.value =
-                          controller.selectedIndex.value == index ? -1 : index;
-                    },
-                    child: AnimatedScale(
-                      scale: isSelected ? 1.05 : 1.0,
-                      duration: const Duration(milliseconds: 250),
-                      child: Card(
-                        elevation: isSelected ? 8 : 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        shadowColor: isSelected
-                            ? Colors.teal.withOpacity(0.4)
-                            : Colors.grey.withOpacity(0.3),
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(16),
-                                ),
-                                child: Image.network(
-                                  spice.image,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                ),
+            // ================================
+            // HASIL RESPONSE TIME API (HTTP/DIO)
+            // ================================
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Obx(() {
+                return Text(
+                  "API Response Time: ${spiceC.responseTime.value} ms",
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                );
+              }),
+            ),
+
+            // ================================
+            // LIST DATA REMPAH
+            // ================================
+            Expanded(
+              child: ListView.builder(
+                itemCount: spiceC.spices.length,
+                itemBuilder: (context, index) {
+                  final spice = spiceC.spices[index];
+
+                  return Card(
+                    margin: const EdgeInsets.all(8),
+                    child: ListTile(
+                      leading: spice.image.isNotEmpty
+                          ? Image.network(
+                              spice.image,
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) =>
+                                  const Icon(Icons.image_not_supported),
+                            )
+                          : const Icon(Icons.image_not_supported),
+                      title: Text(spice.name),
+                      subtitle: Text(
+                        "Asal: ${spice.origin}\n"
+                        "Status Ekspor: ${spice.exportStatus}",
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Hapus'),
+                              content: const Text(
+                                'Yakin ingin menghapus rempah ini?',
                               ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Batal'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Hapus'),
+                                ),
+                              ],
                             ),
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    spice.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    "Asal: ${spice.origin}",
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  Text(
-                                    "Status: ${spice.exportStatus}",
-                                    style: const TextStyle(
-                                      color: Colors.black54,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+
+                          if (confirm == true) {
+                            await spiceC.deleteSpice(spice.id);
+                          }
+                        },
                       ),
                     ),
                   );
@@ -173,6 +127,16 @@ class SpiceDashboard extends StatelessWidget {
               ),
             ),
           ],
+        );
+      }),
+
+      bottomNavigationBar: Obx(() {
+        return Container(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            'Total data: ${spiceC.spices.length}',
+            textAlign: TextAlign.center,
+          ),
         );
       }),
     );

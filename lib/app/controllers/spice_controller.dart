@@ -1,106 +1,213 @@
+import 'dart:io';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../models/spice_model.dart';
 import '../services/spice_api_http.dart';
 import '../services/spice_api_dio.dart';
+import '../services/hive_service.dart';
+import '../services/supabase_service.dart';
+import 'auth_controller.dart';
 
 class SpiceController extends GetxController {
   var spices = <Spice>[].obs;
   var isLoading = false.obs;
   var useDio = false.obs;
   var responseTime = 0.obs;
+
+  // Modul requirement
+  var prefReadTime = 0.obs;
+  var prefWriteTime = 0.obs;
+
   var recommendationText = ''.obs;
 
-  // 🔹 untuk animasi zoom
-  var selectedIndex = (-1).obs;
+  final authC = Get.find<AuthController>();
 
-  // =========================
-  // LOAD DATA UTAMA
-  // =========================
-  Future<void> loadSpices() async {
-    isLoading.value = true;
-    final stopwatch = Stopwatch()..start();
+  @override
+  void onInit() {
+    super.onInit();
+    _initLocal();
+  }
+
+  Future<void> _initLocal() async {
+    await HiveService.init();
+    await _loadPreference();
+    await loadSpices();
+  }
+
+  // ======================= Shared Preferences ===========================
+  Future<void> _loadPreference() async {
+    final sw = Stopwatch()..start();
+    final prefs = await SharedPreferences.getInstance();
+
+    useDio.value = prefs.getBool('useDio') ?? false;
+
+    sw.stop();
+    prefReadTime.value = sw.elapsedMilliseconds;
+  }
+
+  Future<void> _savePreference() async {
+    final sw = Stopwatch()..start();
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setBool('useDio', useDio.value);
+
+    sw.stop();
+    prefWriteTime.value = sw.elapsedMilliseconds;
+  }
+
+  void toggleLibrary() async {
+    useDio.value = !useDio.value;
+    await _savePreference();
+    await loadSpices(forceRemote: true);
+  }
+
+  // ======================= Connectivity Check ===========================
+  Future<bool> _isOffline() async {
     try {
-      print("Memuat data rempah (${useDio.value ? 'Dio' : 'HTTP'})...");
-      if (useDio.value) {
-        spices.value = await SpiceApiDio.fetchSpices();
+      final res = await InternetAddress.lookup("example.com");
+      return res.isEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // ======================= Loading Spices ================================
+  Future<void> loadSpices({bool forceRemote = false}) async {
+    isLoading.value = true;
+    final sw = Stopwatch()..start();
+
+    try {
+      final offline = await _isOffline();
+
+      if (!forceRemote && offline) {
+        final cached = HiveService.readSpices();
+        if (cached != null) {
+          spices.value = cached;
+          return;
+        }
+      }
+
+      if (offline) {
+        spices.value = HiveService.readSpices() ?? [];
       } else {
-        spices.value = await SpiceApiHttp.fetchSpices();
+        // Fetch from remote API
+        final fetched = useDio.value
+            ? await SpiceApiDio.fetchSpices()
+            : await SpiceApiHttp.fetchSpices();
+
+        spices.value = fetched;
+        await HiveService.saveSpices(spices);
       }
     } catch (e) {
-      print('Error: $e');
+      spices.value = HiveService.readSpices() ?? [];
     } finally {
-      stopwatch.stop();
-      responseTime.value = stopwatch.elapsedMilliseconds;
+      sw.stop();
+      responseTime.value = sw.elapsedMilliseconds;
       isLoading.value = false;
-      print("Waktu respon: ${responseTime.value} ms");
     }
   }
 
-  // =========================
-  // TOGGLE LIBRARY
-  // =========================
-  void toggleLibrary() {
-    useDio.value = !useDio.value;
-    loadSpices();
+  // ======================= UPLOAD IMAGE UNIVERSAL =======================
+  /// Android → upload File
+  /// Web → uploadBinary (XFile)
+  Future<String> uploadImage(XFile file) async {
+    final fileName = "rempah_${DateTime.now().millisecondsSinceEpoch}.png";
+    return await SupabaseService.uploadImageUniversal(file, fileName);
   }
 
-  // =========================
-  // EXPERIMEN ASYNC–AWAIT
-  // =========================
-  Future<void> loadSpicesWithRecommendation() async {
+  // ======================= ADD SPICE ====================================
+  Future<void> addSpiceToCloud(Spice spice) async {
+    final user = authC.user.value;
+    if (user == null) throw Exception('User not logged in');
+
+    // Kirim JSON (Map<String, dynamic>) bukan objek Spice
+    await SupabaseService.insertSpice(user.id, spice.toJson());
+  }
+
+  Future<void> addLocalSpice(Spice spice, {bool tryUpload = true}) async {
+    spices.insert(0, spice);
+    await HiveService.saveSpices(spices);
+
+    if (tryUpload) {
+      try {
+        await addSpiceToCloud(spice);
+      } catch (_) {}
+    }
+  }
+
+  // ======================= DELETE SPICE =================================
+  Future<void> deleteSpice(String spiceId) async {
+    spices.removeWhere((s) => s.id == spiceId);
+    await HiveService.saveSpices(spices);
+
     try {
-      recommendationText.value = "Memuat data rempah...";
-      print("Memuat data rempah...");
+      await SupabaseService.deleteSpice(spiceId);
+    } catch (_) {}
 
-      // API pertama
-      final spicesData = await SpiceApiHttp.fetchSpices();
-      final firstSpice = spicesData.first.name;
-
-      // API kedua (chained request)
-      final recommendation = await fetchRecommendation(firstSpice);
-
-      recommendationText.value =
-          "Rekomendasi untuk $firstSpice: $recommendation";
-      print("Rekomendasi untuk $firstSpice: $recommendation");
-    } catch (e) {
-      print("Error async-await: $e");
-      recommendationText.value = "Terjadi error: $e";
-    }
+    Get.snackbar("Berhasil", "Data rempah berhasil dihapus");
   }
 
-  // =========================
-  // EXPERIMEN CALLBACK CHAINING
-  // =========================
+  // ======================= RECOMMENDATION ================================
+  Future<void> loadSpicesWithRecommendation() async {
+    recommendationText.value = "Memuat data rempah...";
+
+    final offline = await _isOffline();
+    final data = offline
+        ? HiveService.readSpices() ?? []
+        : useDio.value
+        ? await SpiceApiDio.fetchSpices()
+        : await SpiceApiHttp.fetchSpices();
+
+    if (data.isEmpty) {
+      recommendationText.value = "Tidak ada data rempah.";
+      return;
+    }
+
+    final first = data.first.name;
+    final rec = await fetchRecommendation(first);
+
+    recommendationText.value = "Rekomendasi: $rec";
+  }
+
   void loadSpicesWithCallback() {
-    recommendationText.value = "Memuat data rempah dengan callback...";
-    print("Memuat data rempah dengan callback...");
+    recommendationText.value = "Memuat data rempah (callback)...";
 
-    SpiceApiHttp.fetchSpices()
-        .then((spicesData) {
-          final firstSpice = spicesData.first.name;
+    (useDio.value ? SpiceApiDio.fetchSpices() : SpiceApiHttp.fetchSpices())
+        .then((data) {
+          if (data.isEmpty) {
+            recommendationText.value = "Tidak ada data rempah.";
+            return;
+          }
 
-          fetchRecommendation(firstSpice)
-              .then((recommendation) {
-                recommendationText.value =
-                    "Rekomendasi untuk $firstSpice: $recommendation";
-                print("Rekomendasi untuk $firstSpice: $recommendation");
+          final first = data.first.name;
+          fetchRecommendation(first)
+              .then((r) {
+                recommendationText.value = "Rekomendasi: $r";
               })
-              .catchError((error) {
-                print("Error saat fetch rekomendasi: $error");
-                recommendationText.value = "Terjadi error saat rekomendasi.";
+              .catchError((_) {
+                recommendationText.value = "Error rekomendasi";
               });
         })
-        .catchError((error) {
-          print("Error callback chaining: $error");
-          recommendationText.value = "Terjadi error saat memuat data rempah.";
+        .catchError((_) {
+          recommendationText.value = "Error memuat data";
         });
   }
 
-  // =========================
-  // SIMULASI API KEDUA
-  // =========================
-  Future<String> fetchRecommendation(String spiceName) async {
+  Future<String> fetchRecommendation(String name) async {
     await Future.delayed(const Duration(seconds: 2));
-    return "Gunakan $spiceName untuk produk ekspor herbal 🌿";
+    return "Gunakan $name untuk produk ekspor herbal";
+  }
+
+  Future<String> uploadImageXFile(XFile file) async {
+    try {
+      final fileName = "rempah_${DateTime.now().millisecondsSinceEpoch}.png";
+      return await SupabaseService.uploadXFile(file, fileName);
+    } catch (e) {
+      debugPrint("Upload XFile error: $e");
+      return "";
+    }
   }
 }
