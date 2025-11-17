@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/spice_model.dart';
@@ -17,7 +16,6 @@ class SpiceController extends GetxController {
   var useDio = false.obs;
   var responseTime = 0.obs;
 
-  // Modul requirement
   var prefReadTime = 0.obs;
   var prefWriteTime = 0.obs;
 
@@ -37,7 +35,6 @@ class SpiceController extends GetxController {
     await loadSpices();
   }
 
-  // ======================= Shared Preferences ===========================
   Future<void> _loadPreference() async {
     final sw = Stopwatch()..start();
     final prefs = await SharedPreferences.getInstance();
@@ -64,7 +61,6 @@ class SpiceController extends GetxController {
     await loadSpices(forceRemote: true);
   }
 
-  // ======================= Connectivity Check ===========================
   Future<bool> _isOffline() async {
     try {
       final res = await InternetAddress.lookup("example.com");
@@ -74,7 +70,6 @@ class SpiceController extends GetxController {
     }
   }
 
-  // ======================= Loading Spices ================================
   Future<void> loadSpices({bool forceRemote = false}) async {
     isLoading.value = true;
     final sw = Stopwatch()..start();
@@ -83,17 +78,13 @@ class SpiceController extends GetxController {
       final offline = await _isOffline();
 
       if (!forceRemote && offline) {
-        final cached = HiveService.readSpices();
-        if (cached != null) {
-          spices.value = cached;
-          return;
-        }
+        spices.value = HiveService.readSpices() ?? [];
+        return;
       }
 
       if (offline) {
         spices.value = HiveService.readSpices() ?? [];
       } else {
-        // Fetch from remote API
         final fetched = useDio.value
             ? await SpiceApiDio.fetchSpices()
             : await SpiceApiHttp.fetchSpices();
@@ -101,7 +92,7 @@ class SpiceController extends GetxController {
         spices.value = fetched;
         await HiveService.saveSpices(spices);
       }
-    } catch (e) {
+    } catch (_) {
       spices.value = HiveService.readSpices() ?? [];
     } finally {
       sw.stop();
@@ -110,21 +101,17 @@ class SpiceController extends GetxController {
     }
   }
 
-  // ======================= UPLOAD IMAGE UNIVERSAL =======================
-  /// Android → upload File
-  /// Web → uploadBinary (XFile)
+  /// Universal upload
   Future<String> uploadImage(XFile file) async {
     final fileName = "rempah_${DateTime.now().millisecondsSinceEpoch}.png";
     return await SupabaseService.uploadImageUniversal(file, fileName);
   }
 
-  // ======================= ADD SPICE ====================================
   Future<void> addSpiceToCloud(Spice spice) async {
     final user = authC.user.value;
     if (user == null) throw Exception('User not logged in');
 
-    // Kirim JSON (Map<String, dynamic>) bukan objek Spice
-    await SupabaseService.insertSpice(user.id, spice.toJson());
+    await SupabaseService.insertSpice(user.id, spice);
   }
 
   Future<void> addLocalSpice(Spice spice, {bool tryUpload = true}) async {
@@ -138,7 +125,6 @@ class SpiceController extends GetxController {
     }
   }
 
-  // ======================= DELETE SPICE =================================
   Future<void> deleteSpice(String spiceId) async {
     spices.removeWhere((s) => s.id == spiceId);
     await HiveService.saveSpices(spices);
@@ -150,64 +136,8 @@ class SpiceController extends GetxController {
     Get.snackbar("Berhasil", "Data rempah berhasil dihapus");
   }
 
-  // ======================= RECOMMENDATION ================================
-  Future<void> loadSpicesWithRecommendation() async {
-    recommendationText.value = "Memuat data rempah...";
-
-    final offline = await _isOffline();
-    final data = offline
-        ? HiveService.readSpices() ?? []
-        : useDio.value
-        ? await SpiceApiDio.fetchSpices()
-        : await SpiceApiHttp.fetchSpices();
-
-    if (data.isEmpty) {
-      recommendationText.value = "Tidak ada data rempah.";
-      return;
-    }
-
-    final first = data.first.name;
-    final rec = await fetchRecommendation(first);
-
-    recommendationText.value = "Rekomendasi: $rec";
-  }
-
-  void loadSpicesWithCallback() {
-    recommendationText.value = "Memuat data rempah (callback)...";
-
-    (useDio.value ? SpiceApiDio.fetchSpices() : SpiceApiHttp.fetchSpices())
-        .then((data) {
-          if (data.isEmpty) {
-            recommendationText.value = "Tidak ada data rempah.";
-            return;
-          }
-
-          final first = data.first.name;
-          fetchRecommendation(first)
-              .then((r) {
-                recommendationText.value = "Rekomendasi: $r";
-              })
-              .catchError((_) {
-                recommendationText.value = "Error rekomendasi";
-              });
-        })
-        .catchError((_) {
-          recommendationText.value = "Error memuat data";
-        });
-  }
-
   Future<String> fetchRecommendation(String name) async {
     await Future.delayed(const Duration(seconds: 2));
     return "Gunakan $name untuk produk ekspor herbal";
-  }
-
-  Future<String> uploadImageXFile(XFile file) async {
-    try {
-      final fileName = "rempah_${DateTime.now().millisecondsSinceEpoch}.png";
-      return await SupabaseService.uploadXFile(file, fileName);
-    } catch (e) {
-      debugPrint("Upload XFile error: $e");
-      return "";
-    }
   }
 }

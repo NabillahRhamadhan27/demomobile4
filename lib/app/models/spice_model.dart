@@ -17,7 +17,7 @@ class Spice extends HiveObject {
   final String exportStatus;
 
   @HiveField(4)
-  final String image; // public URL
+  final String image;
 
   Spice({
     required this.id,
@@ -26,8 +26,6 @@ class Spice extends HiveObject {
     required this.exportStatus,
     required this.image,
   });
-
-  String get imageUrl => image;
 
   factory Spice.fromJson(Map<String, dynamic> json) {
     return Spice(

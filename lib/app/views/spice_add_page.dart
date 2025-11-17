@@ -17,7 +17,7 @@ class _SpiceAddPageState extends State<SpiceAddPage> {
   final originC = TextEditingController();
   final statusC = TextEditingController();
 
-  XFile? pickedFile;
+  XFile? pickedFile; // UNIVERSAL (Web + Android)
   final picker = ImagePicker();
 
   final spc = Get.find<SpiceController>();
@@ -47,10 +47,10 @@ class _SpiceAddPageState extends State<SpiceAddPage> {
     isLoading.value = true;
 
     try {
-      String imageUrl = '';
+      String imageUrl = "";
 
       if (pickedFile != null) {
-        imageUrl = await spc.uploadImageXFile(pickedFile!);
+        imageUrl = await spc.uploadImage(pickedFile!);
       }
 
       final spice = Spice(
@@ -70,7 +70,7 @@ class _SpiceAddPageState extends State<SpiceAddPage> {
       Get.back();
       Get.snackbar("Sukses", "Rempah ditambahkan");
     } catch (e) {
-      Get.snackbar('Error', e.toString());
+      Get.snackbar("Error", e.toString());
     } finally {
       isLoading.value = false;
     }
