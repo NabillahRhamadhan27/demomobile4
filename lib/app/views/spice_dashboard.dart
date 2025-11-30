@@ -16,7 +16,7 @@ class SpiceDashboard extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              Get.toNamed('/add'); // ke halaman tambah
+              Get.toNamed('/add');
             },
           ),
           IconButton(
@@ -38,9 +38,18 @@ class SpiceDashboard extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ================================
-            // HASIL UJI SHARED PREFERENCES
-            // ================================
+            // ================
+            // TOMBOL MAP MODULE 5
+            // ================
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: ElevatedButton(
+                onPressed: () => Get.toNamed('/map'),
+                child: const Text("Open Map / Location Module 5"),
+              ),
+            ),
+
+            // Pref test
             Padding(
               padding: const EdgeInsets.all(8),
               child: Obx(() {
@@ -52,9 +61,7 @@ class SpiceDashboard extends StatelessWidget {
               }),
             ),
 
-            // ================================
-            // HASIL RESPONSE TIME API (HTTP/DIO)
-            // ================================
+            // Response time API
             Padding(
               padding: const EdgeInsets.all(8),
               child: Obx(() {
@@ -65,9 +72,6 @@ class SpiceDashboard extends StatelessWidget {
               }),
             ),
 
-            // ================================
-            // LIST DATA REMPAH
-            // ================================
             Expanded(
               child: ListView.builder(
                 itemCount: spiceC.spices.length,
@@ -77,66 +81,18 @@ class SpiceDashboard extends StatelessWidget {
                   return Card(
                     margin: const EdgeInsets.all(8),
                     child: ListTile(
-                      leading: spice.image.isNotEmpty
-                          ? Image.network(
-                              spice.image,
-                              width: 50,
-                              height: 50,
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) =>
-                                  const Icon(Icons.image_not_supported),
-                            )
-                          : const Icon(Icons.image_not_supported),
                       title: Text(spice.name),
                       subtitle: Text(
                         "Asal: ${spice.origin}\n"
                         "Status Ekspor: ${spice.exportStatus}",
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Hapus'),
-                              content: const Text(
-                                'Yakin ingin menghapus rempah ini?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, false),
-                                  child: const Text('Batal'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Hapus'),
-                                ),
-                              ],
-                            ),
-                          );
-
-                          if (confirm == true) {
-                            await spiceC.deleteSpice(spice.id);
-                          }
-                        },
-                      ),
+                      trailing: Icon(Icons.arrow_forward_ios),
                     ),
                   );
                 },
               ),
             ),
           ],
-        );
-      }),
-
-      bottomNavigationBar: Obx(() {
-        return Container(
-          padding: const EdgeInsets.all(8),
-          child: Text(
-            'Total data: ${spiceC.spices.length}',
-            textAlign: TextAlign.center,
-          ),
         );
       }),
     );

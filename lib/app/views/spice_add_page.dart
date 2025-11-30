@@ -17,7 +17,7 @@ class _SpiceAddPageState extends State<SpiceAddPage> {
   final originC = TextEditingController();
   final statusC = TextEditingController();
 
-  XFile? pickedFile; // UNIVERSAL (Web + Android)
+  XFile? pickedFile;
   final picker = ImagePicker();
 
   final spc = Get.find<SpiceController>();
